@@ -3,15 +3,26 @@
 
 namespace engine {
 
-Display::Display(HANDLE window) : window_(window), write_buffer_(NULL) {
+Display::Display(HANDLE window, HANDLE input)
+ : window_(window), input_(input), write_buffer_(NULL) {
     if (window_ == INVALID_HANDLE_VALUE) {
         std::cerr << "error: invalid display window handle" << std::endl;
         exit(1);
     }
-    
+
+    SetConsoleMode(input_, 0);
+    events_ = new INPUT_RECORD[128];
+
+    // disable cursor from showing
+    CONSOLE_CURSOR_INFO cci = {1, false};
+    if (!SetConsoleCursorInfo(window_, &cci)) {
+        std::cerr << "error: SetConsoleCursorInfo()" << std::endl;
+        exit(1);
+    }
+
     CONSOLE_SCREEN_BUFFER_INFO csbi;
     if (GetConsoleScreenBufferInfo(window_, &csbi) == 0) {
-        std::cerr << "error: get csbi failed" << std::endl;
+        std::cerr << "error: GetCSBI() failed" << std::endl;
         exit(1);
     }
 
@@ -36,7 +47,11 @@ Display::~Display() {
     //free(write_buffer);
     if (write_buffer_)
         delete [] write_buffer_;
+    if (events_)
+        delete [] events_;
+
     write_buffer_ = NULL;
+    events_ = NULL;
 }
 
 void Display::render() {
@@ -48,6 +63,43 @@ void Display::clear(char c, WORD color) {
         write_buffer_[i].Char.AsciiChar = c;
         write_buffer_[i].Attributes = color;
     }
+}
+
+bool Display::poll_event(INPUT_RECORD* event) {
+    if (curr_event_num_ < num_events_) {
+        *event = events_[curr_event_num_++];
+        return true;
+    }
+
+    DWORD num_unread = 0;
+    if (!GetNumberOfConsoleInputEvents(input_, &num_unread)) {
+        std::cerr << "error: Display::poll_event "
+            << "GetNumberOfConsoleInputEvents failed" << std::endl;
+        exit(1);
+    }
+
+    if (num_unread == 0)
+        return false;
+
+    if (!ReadConsoleInput(input_, events_, 128, &num_events_)) {
+        std::cerr << "error: Display::poll_event "
+            << "ReadConsoleInput failed" << std::endl;
+        exit(1);
+    }
+    curr_event_num_ = 0;
+    *event = events_[curr_event_num_++];
+    return true;
+}
+
+void Display::set_point(short x, short y, char c, WORD color) {
+    if (y >= height_ || x >= width_) {
+        std::cerr << "error: Display::set_point out of bounds ("
+            << x << ", " << y << ")" << std::endl;
+        return;
+    }
+
+    write_buffer_[y*width_ + x].Char.AsciiChar = c;
+    write_buffer_[y*width_ + x].Attributes = color;
 }
 
 } // namespace engine
