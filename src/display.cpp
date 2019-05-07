@@ -5,8 +5,8 @@ namespace engine {
 
 Display::Display(HANDLE window, HANDLE input)
  : window_(window), input_(input), write_buffer_(NULL) {
-    if (window_ == INVALID_HANDLE_VALUE) {
-        std::cerr << "error: invalid display window handle" << std::endl;
+    if (window_ == INVALID_HANDLE_VALUE || input_ == INVALID_HANDLE_VALUE) {
+        std::cerr << "error: invalid display window/input handle" << std::endl;
         exit(1);
     }
 
